@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lucky Wheel</title>
+  <style>
+    :root{
+      --bg:#2b0000;
+      --card:#4a0a0a;
+      --text:#fff7e6;
+      --muted:#ffd9a6;
+    }
+
+    body{
+      margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 600px at 50% -10%, #b30000 0%, #2b0000 55%);
+      color:var(--text);
+      display:flex; min-height:100vh; align-items:center; justify-content:center;
+      padding:24px;
+    }
+
+    .wrap{ width:min(980px, 100%); display:grid; grid-template-columns: 1.1fr 0.9fr; gap:18px; }
+
+    .card{
+      background: color-mix(in srgb, var(--card) 92%, black);
+      border: 1px solid rgba(255,216,77,.22);
+      border-radius:18px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+      padding:18px;
+    }
+
+    h1{ margin:0 0 6px; font-size:22px; letter-spacing:.2px; }
+
+    .stage{ display:flex; align-items:center; justify-content:center; position:relative; }
+    canvas{ width: 420px; height: 420px; max-width: 100%; aspect-ratio:1/1; }
+
+    .pointer{
+      position:absolute; top:6px; width:0; height:0;
+      border-left:14px solid transparent;
+      border-right:14px solid transparent;
+      border-bottom:24px solid #ff3b3b;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.5));
+    }
+
+    .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
+    button{
+      border:0;
+      border-radius:14px;
+      padding:12px 14px;
+      background:#ffd84d;
+      color:#3a0000;
+      font-weight:800;
+      cursor:pointer;
+      box-shadow: 0 10px 20px rgba(0,0,0,.35);
+    }
+
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .smallbtn{
+      background: transparent; color: var(--text);
+      border: 1px solid rgba(255,255,255,.18);
+      font-weight:600;
+    }
+
+    /* modal */
+    .modal{
+      position:fixed; inset:0; display:none; place-items:center;
+      background: rgba(0,0,0,.55); padding:18px;
+      z-index: 9999;
+    }
+    .modal.on{ display:grid; }
+    .modal .box{
+      width:min(520px, 100%);
+      background: #0f1730;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:18px; padding:16px;
+      box-shadow: 0 18px 60px rgba(0,0,0,.55);
+    }
+    .modal h2{ margin:0 0 6px; font-size:18px; }
+    .modal p{ margin:0 0 14px; color:var(--muted); }
+
+    .result{
+      font-size:22px; font-weight:900; margin:10px 0 12px;
+      padding:12px; border-radius:14px;
+      background: rgba(255,216,77,.12);
+      border:1px solid rgba(255,216,77,.35);
+    }
+
+    .result-img{
+      width:100%;
+      max-height:220px;
+      object-fit:contain;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.03);
+      padding:10px;
+      display:none;
+    }
+
+    /* Center layout when hiding prize list */
+    .wrap.single{
+      grid-template-columns: 1fr;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .wrap.single .card:nth-child(2){
+      display:none;
+    }
+    .wrap.single .stage{
+      justify-content: center;
+    }
+    .wrap.single canvas{
+      width: 460px;
+      height: 460px;
+    }
+
+    /* phone input style */
+    .phone-input{
+      width:100%;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(255,255,255,.06);
+      color:var(--text);
+      outline:none;
+      font-size:14px;
+    }
+    .phone-err{
+      margin:10px 0 0;
+      color:#ffd84d;
+      display:none;
+      font-size:13px;
+      line-height:1.4;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap single">
+    <div class="card">
+      <h1>Vòng Quay Năm Mới</h1>
+
+      <div class="stage">
+        <div class="pointer" aria-hidden="true"></div>
+        <canvas id="wheel" width="520" height="520"></canvas>
+      </div>
+
+      <div class="controls" style="margin-top:14px;">
+        <button id="spinBtn">Quay</button>
+        <button id="resetBtn" class="smallbtn" title="Cho phép quay lại và xóa kết quả đã lưu">Quay Lại</button>
+        <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:var(--muted);">
+          <input id="oneSpin" type="checkbox" checked />
+          Chỉ cho quay 1 lần mỗi phiên
+        </label>
+      </div>
+    </div>
+
+    <!-- hidden by .wrap.single, kept for compatibility -->
+    <div class="card">
+      <h1>Danh sách giải</h1>
+      <div id="prizeList"></div>
+    </div>
+  </div>
+
+  <!-- PHONE MODAL -->
+  <div id="phoneModal" class="modal" role="dialog" aria-modal="true">
+    <div class="box">
+      <h2>Nhập số điện thoại</h2>
+      <p>Nhập số điện thoại để quay (mỗi số chỉ được 1 lượt trên toàn website)</p>
+      <input id="phoneInput" class="phone-input" type="tel" placeholder="VD 0901234567" inputmode="numeric" />
+      <div class="controls" style="margin-top:12px;">
+        <button id="phoneSubmit">Tiếp tục</button>
+        <button id="phoneCancel" class="smallbtn">Hủy</button>
+      </div>
+      <p id="phoneErr" class="phone-err"></p>
+    </div>
+  </div>
+
+  <!-- RESULT MODAL -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true">
+    <div class="box">
+      <h2>Kết quả</h2>
+      <!-- this <p> will be dynamically replaced to include phone -->
+      <p>Chúc mừng bạn đã quay trúng</p>
+
+      <div id="resultText" class="result">...</div>
+      <img id="resultImg" class="result-img" alt="Prize image">
+      <div class="controls" style="margin-top:12px;">
+        <button id="closeModal">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // =========================
+  // 0) PUT YOUR GOOGLE APPS SCRIPT WEB APP URL HERE (MUST END WITH /exec)
+  // Example: https://script.google.com/macros/s/XXXX/exec
+  // =========================
+  const API_URL = "https://script.google.com/macros/s/AKfycbxocvnHTk4L2czlCurwY1JgpcTUzBXJU6KjBOj6bjdv_HnJjGVZjeYaJ9zIfoNij4vr/exec";
+
+  // Labels MUST match Google Sheet column A exactly
+  const PRIZES = [
+    { label: "Giải Khuyến Khích", image: "images/Extra.png" },
+    { label: "Giải Ba",          image: "images/3rd.png" },
+    { label: "Giải Nhì",         image: "images/2nd.png" },
+    { label: "Giải Nhất",        image: "images/1st.png" },
+    { label: "Giải Đặc Biệt",    image: "images/Special.png" },
+  ];
+
+  // Tet palette (slices)
+  const COLORS = [
+    "#b30000", "#ffd84d", "#ff4d4d", "#ffb703",
+    "#7a0000", "#ffe08a", "#d90429", "#f6bd60"
+  ];
+
+  // =========================
+  // Wheel render
+  // =========================
+  const canvas = document.getElementById("wheel");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2;
+  const radius = Math.min(W,H) * 0.42;
+
+  const spinBtn = document.getElementById("spinBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const oneSpin = document.getElementById("oneSpin");
+
+  const modal = document.getElementById("modal");
+  const resultText = document.getElementById("resultText");
+  const resultImg = document.getElementById("resultImg");
+  const closeModal = document.getElementById("closeModal");
+
+  const phoneModal = document.getElementById("phoneModal");
+  const phoneInput = document.getElementById("phoneInput");
+  const phoneSubmit = document.getElementById("phoneSubmit");
+  const phoneCancel = document.getElementById("phoneCancel");
+  const phoneErr = document.getElementById("phoneErr");
+
+  let angle = 0;
+  let spinning = false;
+
+  // One-spin per session (optional). Phone limitation is global (server-side).
+  const STORE_KEY = "lucky_wheel_spun";
+  function hasSpun() { return sessionStorage.getItem(STORE_KEY) === "1"; }
+  function setSpun(v){ sessionStorage.setItem(STORE_KEY, v ? "1" : "0"); }
+
+  function drawWheel(){
+    ctx.clearRect(0,0,W,H);
+
+    // background ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius + 18, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(255,255,255,.06)";
+    ctx.fill();
+    ctx.closePath();
+
+    const n = PRIZES.length;
+    const slice = (Math.PI*2)/n;
+
+    // rotate wheel
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.translate(-cx, -cy);
+
+    for (let i=0; i<n; i++){
+      const start = i*slice;
+      const end = start + slice;
+
+      // slice
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, start, end);
+      ctx.closePath();
+      ctx.fillStyle = COLORS[i % COLORS.length];
+      ctx.fill();
+
+      // text
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(start + slice/2);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(10,10,20,.92)";
+      ctx.font = "700 18px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.fillText(PRIZES[i].label, radius - 12, 7);
+      ctx.restore();
+
+      // separators
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, start, start);
+      ctx.strokeStyle = "rgba(255,255,255,.25)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // center cap
+    ctx.beginPath();
+    ctx.arc(cx, cy, 42, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(15,23,48,.95)";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,255,255,.9)";
+    ctx.font = "800 14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("SPIN", cx, cy + 5);
+  }
+
+  function openResult(prize, remaining, phone){
+    // Replace the first <p> inside modal with the phone sentence
+    const p = modal.querySelector(".box p");
+    if (p) {
+      if (phone) {
+        p.textContent = `Chúc Mừng Quý Khách Có Số Điện Thoại ${phone} Đã Trúng`;
+      } else {
+        p.textContent = "Chúc mừng bạn đã quay trúng";
+      }
+    }
+
+    resultText.textContent = prize.label;
+
+    const imgUrl = prize.image || "";
+    if (imgUrl) {
+      resultImg.src = imgUrl;
+      resultImg.style.display = "block";
+    } else {
+      resultImg.removeAttribute("src");
+      resultImg.style.display = "none";
+    }
+
+    modal.classList.add("on");
+  }
+
+  function closeResult(){ modal.classList.remove("on"); }
+  closeModal.addEventListener("click", closeResult);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeResult(); });
+
+  function updateSpinStateUI(){
+    const lock = oneSpin.checked && hasSpun();
+    spinBtn.disabled = lock || spinning;
+    spinBtn.textContent = lock ? "Đã quay rồi" : (spinning ? "Đang quay..." : "Quay");
+  }
+  oneSpin.addEventListener("change", updateSpinStateUI);
+
+  resetBtn.addEventListener("click", () => {
+    // Reset ONLY the session limit. Global phone limit + prize pool stays on server.
+    setSpun(false);
+    spinning = false;
+    updateSpinStateUI();
+    closeResult();
+  });
+
+  // Spin animation to land on a chosen index
+  function spinToIndex(targetIndex, serverPrize, remaining, phone){
+    if (spinning) return;
+    spinning = true;
+    updateSpinStateUI();
+
+    const n = PRIZES.length;
+    const slice = (Math.PI*2)/n;
+
+    // land in the middle of target slice at pointer (top)
+    const targetAngleAtPointer = targetIndex*slice + slice/2;
+    const pointer = -Math.PI/2;
+    let angleEnd = pointer - targetAngleAtPointer;
+
+    const extraTurns = 6 + Math.floor(Math.random()*3);
+    angleEnd += extraTurns * Math.PI*2;
+
+    const start = angle;
+    const delta = angleEnd - start;
+    const duration = 4200;
+    const t0 = performance.now();
+
+    function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+    function frame(t){
+      const p = Math.min(1, (t - t0)/duration);
+      angle = start + delta * easeOutCubic(p);
+      drawWheel();
+
+      if (p < 1){
+        requestAnimationFrame(frame);
+      } else {
+        angle = angleEnd % (Math.PI*2);
+        drawWheel();
+
+        spinning = false;
+        if (oneSpin.checked) setSpun(true);
+        updateSpinStateUI();
+        openResult(serverPrize, remaining, phone);
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  // =========================
+  // Phone modal helpers
+  // =========================
+  function openPhoneModal(){
+    phoneErr.style.display = "none";
+    phoneErr.textContent = "";
+    phoneInput.value = "";
+    phoneModal.classList.add("on");
+    setTimeout(() => phoneInput.focus(), 50);
+  }
+  function closePhoneModal(){
+    phoneModal.classList.remove("on");
+  }
+  phoneCancel.addEventListener("click", closePhoneModal);
+  phoneModal.addEventListener("click", (e) => { if (e.target === phoneModal) closePhoneModal(); });
+
+  function normalizePhoneClient(s){
+    const digits0 = String(s).replace(/\D/g, "");
+    if (digits0.startsWith("84") && digits0.length >= 11) return "0" + digits0.slice(2);
+    if (digits0.length === 9) return "0" + digits0;
+    return digits0;
+  }
+  function isValidVNClient(p){
+    return /^0\d{9}$/.test(p);
+  }
+
+  async function requestSpinWithPhone(phone){
+    const url = `${API_URL}?action=spin&phone=${encodeURIComponent(phone)}`;
+    const res = await fetch(url, { method: "GET" });
+    return await res.json();
+  }
+
+  // Click "Quay" => ask phone first
+  spinBtn.addEventListener("click", () => {
+    if (oneSpin.checked && hasSpun()) return;
+    openPhoneModal();
+  });
+
+  // Submit phone => call server => spin to result
+  phoneSubmit.addEventListener("click", async () => {
+    const phone = normalizePhoneClient(phoneInput.value);
+    if (!isValidVNClient(phone)) {
+      phoneErr.textContent = "Số điện thoại không hợp lệ (VD 0901234567)";
+      phoneErr.style.display = "block";
+      return;
+    }
+
+    closePhoneModal();
+
+    // IMPORTANT: don't set spinning=true here (spinToIndex will do it).
+    // Lock the button visually while waiting for API.
+    spinBtn.disabled = true;
+    spinBtn.textContent = "Đang xử lý...";
+
+    try {
+      const data = await requestSpinWithPhone(phone);
+
+      if (!data.ok) {
+        updateSpinStateUI();
+
+        if (data.error === "PHONE_ALREADY_SPUN") alert("Số điện thoại này đã quay rồi");
+        else if (data.error === "OUT_OF_STOCK") alert("Hết giải rồi");
+        else if (data.error === "PHONE_REQUIRED") alert("Vui lòng nhập số điện thoại");
+        else if (data.error === "PHONE_INVALID") alert("Số điện thoại không hợp lệ");
+        else alert("Lỗi: " + (data.error || "Unknown"));
+
+        return;
+      }
+
+      const label = data.prize?.label;
+      const imgFromServer = data.prize?.image || "";
+      const remaining = typeof data.remaining === "number" ? data.remaining : undefined;
+
+      const idx = PRIZES.findIndex(p => p.label === label);
+      if (idx === -1) {
+        updateSpinStateUI();
+        alert("Server trả về giải không khớp label trong PRIZES: " + label);
+        return;
+      }
+
+      const serverPrize = { ...PRIZES[idx], label };
+      if (imgFromServer) serverPrize.image = imgFromServer;
+
+      // spin to server-chosen prize, and pass returned normalized phone from server
+      spinToIndex(idx, serverPrize, remaining, data.phone || phone);
+    } catch (err) {
+      updateSpinStateUI();
+      alert("Không gọi được API. Kiểm tra API_URL và quyền truy cập Web App.");
+    }
+  });
+
+  // init
+  drawWheel();
+  updateSpinStateUI();
+</script>
+</body>
+</html>
